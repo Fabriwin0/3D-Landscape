@@ -67,4 +67,4 @@ An immersive audio visualization experience that transforms sound into dynamic 3
 
 ## License
 
-MIT License
+Apache 2.0
