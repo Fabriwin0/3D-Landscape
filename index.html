@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced 3D Audio Landscape Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #000428 0%, #004e92 100%);
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(15px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            max-width: 300px;
+        }
+        
+        .control-section {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-title {
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+        }
+
+        .section-title::after {
+            content: '▼';
+            font-size: 12px;
+            transition: transform 0.3s;
+        }
+
+        .section-title.collapsed::after {
+            transform: rotate(-90deg);
+        }
+
+        .section-content {
+            max-height: 300px;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+
+        .section-content.collapsed {
+            max-height: 0;
+        }
+        
+        .section-title {
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            margin: 3px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button.active {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            box-shadow: 0 4px 15px rgba(240, 147, 251, 0.4);
+        }
+        
+        select, input[type="range"] {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 8px;
+            border-radius: 6px;
+            margin: 5px;
+            width: calc(100% - 10px);
+        }
+        
+        input[type="file"] {
+            color: white;
+            margin: 10px 0;
+            width: 100%;
+        }
+        
+        .preset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+        }
+        
+        .mode-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 5px;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: white;
+            font-size: 12px;
+        }
+        
+        #info {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(15px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            font-size: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        
+        .frequency-display {
+            display: flex;
+            gap: 2px;
+            margin-top: 10px;
+            height: 40px;
+            align-items: end;
+        }
+        
+        .freq-bar {
+            width: 6px;
+            background: linear-gradient(to top, #00f5ff, #00ff88, #ffff00, #ff4500);
+            border-radius: 3px;
+            transition: height 0.15s ease;
+            min-height: 2px;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+        
+        .pattern-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 20px;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="controls">
+            <div class="control-section">
+                <div class="section-title">Audio Control</div>
+                <div class="section-content">
+                    <button id="startBtn">Start Audio</button>
+                    <button id="pauseBtn" disabled>Pause</button>
+                    <input type="file" id="audioFile" accept="audio/*">
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <div class="section-title">Visual Presets</div>
+                <div class="section-content">
+                    <div class="preset-grid">
+                        <button class="preset-btn active" data-preset="cosmic">Cosmic</button>
+                        <button class="preset-btn" data-preset="neon">Neon City</button>
+                        <button class="preset-btn" data-preset="ocean">Ocean Depths</button>
+                        <button class="preset-btn" data-preset="fire">Fire Storm</button>
+                        <button class="preset-btn" data-preset="aurora">Aurora</button>
+                        <button class="preset-btn" data-preset="synthwave">Synthwave</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <div class="section-title">Visualization Modes</div>
+                <div class="section-content">
+                    <div class="mode-grid">
+                        <button class="mode-btn active" data-mode="terrain">Terrain</button>
+                        <button class="mode-btn" data-mode="sphere">Sphere</button>
+                        <button class="mode-btn" data-mode="tunnel">Tunnel</button>
+                        <button class="mode-btn" data-mode="galaxy">Galaxy</button>
+                        <button class="mode-btn" data-mode="crystal">Crystal</button>
+                        <button class="mode-btn" data-mode="waves">Waves</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-section">
+                <div class="section-title">Pattern Controls</div>
+                <div class="section-content">
+                    <div class="slider-container">
+                        <label>Intensity:</label>
+                        <input type="range" id="intensity" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                    <div class="slider-container">
+                        <label>Speed:</label>
+                        <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1">
+                    </div>
+                    <div class="slider-container">
+                        <label>Complexity:</label>
+                        <input type="range" id="complexity" min="1" max="5" step="1" value="3">
+                    </div>
+                    <button id="randomizeBtn">Randomize</button>
+                </div>
+            </div>
+            
+            <div class="frequency-display" id="freqDisplay"></div>
+        </div>
+        
+        <div class="pattern-indicator" id="patternIndicator">
+            Cosmic Terrain
+        </div>
+        
+        <div id="info">
+            <div>Mode: <span id="currentMode">Terrain</span></div>
+            <div>Preset: <span id="currentPreset">Cosmic</span></div>
+            <div>Frequency Range: <span id="freqRange">20Hz - 20kHz</span></div>
+            <div>Amplitude: <span id="amplitude">0</span></div>
+            <div>Dominant Freq: <span id="dominantFreq">0 Hz</span></div>
+        </div>
+    </div>
+
+    <script>
+        class EnhancedAudioVisualizer3D {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.currentGeometry = null;
+                this.currentMaterial = null;
+                this.currentMesh = null;
+                this.audioContext = null;
+                this.analyser = null;
+                this.dataArray = null;
+                this.audioSource = null;
+                this.isPlaying = false;
+                this.particleSystem = null;
+                this.backgroundObjects = [];
+                
+                // Visual state
+                this.currentMode = 'terrain';
+                this.currentPreset = 'cosmic';
+                this.intensity = 1;
+                this.speed = 1;
+                this.complexity = 3;
+                this.animationTime = 0;
+                
+                // Presets configuration
+                this.presets = {
+                    cosmic: {
+                        colors: [0x000428, 0x004e92, 0x009ffd, 0x00d2ff],
+                        particleColor: 0x00d2ff,
+                        background: 0x000011,
+                        glowStrength: 1.5
+                    },
+                    neon: {
+                        colors: [0xff006e, 0x8338ec, 0x3a86ff, 0x06ffa5],
+                        particleColor: 0xff006e,
+                        background: 0x0a0a0a,
+                        glowStrength: 2.0
+                    },
+                    ocean: {
+                        colors: [0x001f3f, 0x0074d9, 0x39cccc, 0x2ecc40],
+                        particleColor: 0x39cccc,
+                        background: 0x001122,
+                        glowStrength: 1.2
+                    },
+                    fire: {
+                        colors: [0x8b0000, 0xff4500, 0xff6347, 0xffd700],
+                        particleColor: 0xff4500,
+                        background: 0x1a0000,
+                        glowStrength: 2.5
+                    },
+                    aurora: {
+                        colors: [0x4b0082, 0x9370db, 0x00ff7f, 0x00ffff],
+                        particleColor: 0x9370db,
+                        background: 0x000033,
+                        glowStrength: 1.8
+                    },
+                    synthwave: {
+                        colors: [0xff0080, 0xff8c00, 0xffff00, 0x00ff80],
+                        particleColor: 0xff0080,
+                        background: 0x0a0014,
+                        glowStrength: 2.2
+                    }
+                };
+                
+                this.init();
+                this.animate();
+            }
+            
+            init() {
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.updateBackground();
+                
+                // Camera setup
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(0, 50, 100);
+                
+                // Renderer setup
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.getElementById('container').appendChild(this.renderer.domElement);
+                
+                // Initialize visualization
+                this.createVisualization();
+                this.createParticleSystem();
+                this.createBackgroundElements();
+                this.setupLighting();
+                this.setupEventListeners();
+                this.createFrequencyDisplay();
+                
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            createVisualization() {
+                // Remove existing mesh
+                if (this.currentMesh) {
+                    this.scene.remove(this.currentMesh);
+                    if (this.currentGeometry) this.currentGeometry.dispose();
+                    if (this.currentMaterial) this.currentMaterial.dispose();
+                }
+                
+                switch (this.currentMode) {
+                    case 'terrain':
+                        this.createTerrain();
+                        break;
+                    case 'sphere':
+                        this.createSphere();
+                        break;
+                    case 'tunnel':
+                        this.createTunnel();
+                        break;
+                    case 'galaxy':
+                        this.createGalaxy();
+                        break;
+                    case 'crystal':
+                        this.createCrystal();
+                        break;
+                    case 'waves':
+                        this.createWaves();
+                        break;
+                }
+            }
+            
+            createTerrain() {
+                this.currentGeometry = new THREE.PlaneGeometry(200, 200, 100, 100);
+                this.currentGeometry.rotateX(-Math.PI / 2);
+                this.currentMaterial = this.createShaderMaterial('terrain');
+                this.currentMesh = new THREE.Mesh(this.currentGeometry, this.currentMaterial);
+                this.scene.add(this.currentMesh);
+            }
+            
+            createSphere() {
+                this.currentGeometry = new THREE.SphereGeometry(50, 64, 32);
+                this.currentMaterial = this.createShaderMaterial('sphere');
+                this.currentMesh = new THREE.Mesh(this.currentGeometry, this.currentMaterial);
+                this.scene.add(this.currentMesh);
+            }
+            
+            createTunnel() {
+                this.currentGeometry = new THREE.CylinderGeometry(30, 30, 200, 32, 50, true);
+                this.currentMaterial = this.createShaderMaterial('tunnel');
+                this.currentMesh = new THREE.Mesh(this.currentGeometry, this.currentMaterial);
+                this.currentMesh.rotation.x = Math.PI / 2;
+                this.scene.add(this.currentMesh);
+            }
+            
+            createGalaxy() {
+                this.currentGeometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(10000 * 3);
+                for (let i = 0; i < 10000; i++) {
+                    const radius = Math.random() * 100;
+                    const angle = Math.random() * Math.PI * 2;
+                    positions[i * 3] = Math.cos(angle) * radius;
+                    positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
+                    positions[i * 3 + 2] = Math.sin(angle) * radius;
+                }
+                this.currentGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                this.currentMaterial = new THREE.PointsMaterial({
+                    size: 2,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending
+                });
+                this.currentMesh = new THREE.Points(this.currentGeometry, this.currentMaterial);
+                this.scene.add(this.currentMesh);
+            }
+            
+            createCrystal() {
+                this.currentGeometry = new THREE.OctahedronGeometry(40, 3);
+                this.currentMaterial = this.createShaderMaterial('crystal');
+                this.currentMesh = new THREE.Mesh(this.currentGeometry, this.currentMaterial);
+                this.scene.add(this.currentMesh);
+            }
+            
+            createWaves() {
+                this.currentGeometry = new THREE.PlaneGeometry(200, 200, 150, 150);
+                this.currentMaterial = this.createShaderMaterial('waves');
+                this.currentMesh = new THREE.Mesh(this.currentGeometry, this.currentMaterial);
+                this.scene.add(this.currentMesh);
+            }
+            
+            createShaderMaterial(type) {
+                const preset = this.presets[this.currentPreset];
+                const vertexShader = this.getVertexShader(type);
+                const fragmentShader = this.getFragmentShader(type);
+                
+                return new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        frequencies: { value: new Array(128).fill(0) },
+                        amplitude: { value: 0 },
+                        intensity: { value: this.intensity },
+                        speed: { value: this.speed },
+                        complexity: { value: this.complexity },
+                        color1: { value: new THREE.Color(preset.colors[0]) },
+                        color2: { value: new THREE.Color(preset.colors[1]) },
+                        color3: { value: new THREE.Color(preset.colors[2]) },
+                        color4: { value: new THREE.Color(preset.colors[3]) },
+                        glowStrength: { value: preset.glowStrength }
+                    },
+                    vertexShader,
+                    fragmentShader,
+                    transparent: true,
+                    side: THREE.DoubleSide
+                });
+            }
+            
+            getVertexShader(type) {
+                const baseVertex = `
+                    uniform float time;
+                    uniform float frequencies[128];
+                    uniform float amplitude;
+                    uniform float intensity;
+                    uniform float speed;
+                    uniform float complexity;
+                    varying vec3 vPosition;
+                    varying vec3 vNormal;
+                    varying float vElevation;
+                    varying float vFrequency;
+                `;
+                
+                switch (type) {
+                    case 'terrain':
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                
+                                float freq = length(position.xz) * 0.01;
+                                int freqIndex = int(clamp(freq * 64.0, 0.0, 127.0));
+                                float displacement = frequencies[freqIndex] * 30.0 * amplitude * intensity;
+                                
+                                float wave1 = sin(position.x * 0.1 * complexity + time * speed * 2.0) * 5.0;
+                                float wave2 = cos(position.z * 0.1 * complexity + time * speed * 1.5) * 5.0;
+                                float wave3 = sin((position.x + position.z) * 0.05 * complexity + time * speed) * 3.0;
+                                
+                                vec3 newPosition = position;
+                                newPosition.y += displacement + wave1 + wave2 + wave3;
+                                
+                                vElevation = newPosition.y;
+                                vFrequency = frequencies[freqIndex];
+                                
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                            }
+                        `;
+                    case 'sphere':
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                
+                                float freq = (position.y + 50.0) / 100.0;
+                                int freqIndex = int(clamp(freq * 127.0, 0.0, 127.0));
+                                float displacement = frequencies[freqIndex] * 20.0 * amplitude * intensity;
+                                
+                                vec3 newPosition = position + normal * displacement;
+                                newPosition += normal * sin(time * speed * 3.0 + length(position) * complexity * 0.1) * 5.0;
+                                
+                                vElevation = displacement;
+                                vFrequency = frequencies[freqIndex];
+                                
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                            }
+                        `;
+                    case 'tunnel':
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                
+                                float freq = (position.z + 100.0) / 200.0;
+                                int freqIndex = int(clamp(freq * 127.0, 0.0, 127.0));
+                                float displacement = frequencies[freqIndex] * 15.0 * amplitude * intensity;
+                                
+                                vec3 newPosition = position;
+                                newPosition += normal * displacement;
+                                newPosition += normal * sin(position.z * 0.1 * complexity + time * speed * 2.0) * 3.0;
+                                
+                                vElevation = displacement;
+                                vFrequency = frequencies[freqIndex];
+                                
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                            }
+                        `;
+                    case 'crystal':
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                
+                                float freq = length(position) / 40.0;
+                                int freqIndex = int(clamp(freq * 127.0, 0.0, 127.0));
+                                float displacement = frequencies[freqIndex] * 25.0 * amplitude * intensity;
+                                
+                                vec3 newPosition = position + normal * displacement;
+                                newPosition *= (1.0 + sin(time * speed * 2.0 + length(position) * complexity * 0.2) * 0.1);
+                                
+                                vElevation = displacement;
+                                vFrequency = frequencies[freqIndex];
+                                
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                            }
+                        `;
+                    case 'waves':
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                
+                                float freq = (position.x + position.z + 200.0) / 400.0;
+                                int freqIndex = int(clamp(freq * 127.0, 0.0, 127.0));
+                                float displacement = frequencies[freqIndex] * 20.0 * amplitude * intensity;
+                                
+                                float wave = sin(position.x * 0.1 * complexity + time * speed * 2.0) * 
+                                           cos(position.z * 0.1 * complexity + time * speed * 1.5) * 10.0;
+                                
+                                vec3 newPosition = position;
+                                newPosition.y = displacement + wave;
+                                
+                                vElevation = newPosition.y;
+                                vFrequency = frequencies[freqIndex];
+                                
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+                            }
+                        `;
+                    default:
+                        return baseVertex + `
+                            void main() {
+                                vPosition = position;
+                                vNormal = normal;
+                                vElevation = 0.0;
+                                vFrequency = 0.0;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `;
+                }
+            }
+            
+            getFragmentShader(type) {
+                return `
+                    uniform float time;
+                    uniform float glowStrength;
+                    uniform vec3 color1;
+                    uniform vec3 color2;
+                    uniform vec3 color3;
+                    uniform vec3 color4;
+                    varying vec3 vPosition;
+                    varying vec3 vNormal;
+                    varying float vElevation;
+                    varying float vFrequency;
+                    
+                    vec3 getFrequencyColor(float freq, float elev) {
+                        float normalizedFreq = clamp(freq, 0.0, 1.0);
+                        float normalizedElev = clamp(elev / 30.0, 0.0, 1.0);
+                        
+                        vec3 color;
+                        if (normalizedFreq < 0.25) {
+                            color = mix(color1, color2, normalizedFreq * 4.0);
+                        } else if (normalizedFreq < 0.5) {
+                            color = mix(color2, color3, (normalizedFreq - 0.25) * 4.0);
+                        } else if (normalizedFreq < 0.75) {
+                            color = mix(color3, color4, (normalizedFreq - 0.5) * 4.0);
+                        } else {
+                            color = mix(color4, color1, (normalizedFreq - 0.75) * 4.0);
+                        }
+                        
+                        // Add elevation-based brightness
+                        color *= (0.5 + normalizedElev * 0.5);
+                        
+                        return color;
+                    }
+                    
+                    void main() {
+                        vec3 color = getFrequencyColor(vFrequency, vElevation);
+                        
+                        // Add pulsing effect
+                        float pulse = sin(time * 3.0 + vFrequency * 10.0) * 0.2 + 0.8;
+                        color *= pulse * glowStrength;
+                        
+                        // Add rim lighting
+                        float rim = 1.0 - dot(normalize(vNormal), vec3(0.0, 0.0, 1.0));
+                        color += rim * rim * color * 0.5;
+                        
+                        // Add distance-based effects
+                        float dist = length(vPosition) / 100.0;
+                        float alpha = max(0.3, 1.0 - dist * 0.5);
+                        
+                        gl_FragColor = vec4(color, alpha);
+                    }
+                `;
+            }
+            
+            createParticleSystem() {
+                const particleCount = 5000;
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                const sizes = new Float32Array(particleCount);
+                
+                for (let i = 0; i < particleCount; i++) {
+                    positions[i * 3] = (Math.random() - 0.5) * 600;
+                    positions[i * 3 + 1] = (Math.random() - 0.5) * 400;
+                    positions[i * 3 + 2] = (Math.random() - 0.5) * 600;
+                    
+                    const preset = this.presets[this.currentPreset];
+                    const color = new THREE.Color(preset.particleColor);
+                    colors[i * 3] = color.r;
+                    colors[i * 3 + 1] = color.g;
+                    colors[i * 3 + 2] = color.b;
+                    
+                    sizes[i] = Math.random() * 3 + 1;
+                }
+                
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+                
+                const material = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        amplitude: { value: 0 }
+                    },
+                    vertexShader: `
+                        attribute float size;
+                        uniform float time;
+                        uniform float amplitude;
+                        varying vec3 vColor;
+                        
+                        void main() {
+                            vColor = color;
+                            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                            gl_PointSize = size * (300.0 / -mvPosition.z) * (1.0 + amplitude * 2.0);
+                            gl_Position = projectionMatrix * mvPosition;
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vColor;
+                        
+                        void main() {
+                            float dist = length(gl_PointCoord - vec2(0.5));
+                            if (dist > 0.5) discard;
+                            
+                            float alpha = 1.0 - (dist * 2.0);
+                            alpha = pow(alpha, 2.0);
+                            
+                            gl_FragColor = vec4(vColor, alpha);
+                        }
+                    `,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    vertexColors: true
+                });
+                
+                this.particleSystem = new THREE.Points(geometry, material);
+                this.scene.add(this.particleSystem);
+            }
+            
+            createBackgroundElements() {
+                // Create floating geometric shapes
+                for (let i = 0; i < 20; i++) {
+                    const geometry = new THREE.OctahedronGeometry(Math.random() * 5 + 2, 0);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: this.presets[this.currentPreset].colors[Math.floor(Math.random() * 4)],
+                        transparent: true,
+                        opacity: 0.3,
+                        wireframe: true
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.set(
+                        (Math.random() - 0.5) * 400,
+                        (Math.random() - 0.5) * 200,
+                        (Math.random() - 0.5) * 400
+                    );
+                    this.backgroundObjects.push(mesh);
+                    this.scene.add(mesh);
+                }
+            }
+            
+            setupLighting() {
+                // Remove existing lights
+                const lights = this.scene.children.filter(child => child.isLight);
+                lights.forEach(light => this.scene.remove(light));
+                
+                // Ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+                this.scene.add(ambientLight);
+                
+                // Dynamic colored lights based on preset
+                const preset = this.presets[this.currentPreset];
+                for (let i = 0; i < 4; i++) {
+                    const light = new THREE.PointLight(preset.colors[i], 2, 300);
+                    light.position.set(
+                        Math.cos(i * Math.PI / 2) * 150,
+                        50 + Math.sin(i) * 30,
+                        Math.sin(i * Math.PI / 2) * 150
+                    );
+                    this.scene.add(light);
+                }
+                
+                // Directional light for definition
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+                dirLight.position.set(100, 100, 100);
+                this.scene.add(dirLight);
+            }
+            
+            setupEventListeners() {
+                // Audio controls
+                document.getElementById('startBtn').addEventListener('click', () => this.startAudio());
+                document.getElementById('pauseBtn').addEventListener('click', () => this.pauseAudio());
+                document.getElementById('audioFile').addEventListener('change', (e) => this.loadAudioFile(e));
+                
+                // Preset controls
+                document.querySelectorAll('.preset-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.setPreset(e.target.dataset.preset);
+                    });
+                });
+                
+                // Mode controls
+                document.querySelectorAll('.mode-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                        this.setMode(e.target.dataset.mode);
+                    });
+                });
+                
+                // Slider controls
+                document.getElementById('intensity').addEventListener('input', (e) => {
+                    this.intensity = parseFloat(e.target.value);
+                    this.updateUniforms();
+                });
+                
+                document.getElementById('speed').addEventListener('input', (e) => {
+                    this.speed = parseFloat(e.target.value);
+                    this.updateUniforms();
+                });
+                
+                document.getElementById('complexity').addEventListener('input', (e) => {
+                    this.complexity = parseFloat(e.target.value);
+                    this.updateUniforms();
+                });
+                
+                // Randomize button
+                document.getElementById('randomizeBtn').addEventListener('click', () => this.randomizeSettings());
+            }
+            
+            setPreset(presetName) {
+                this.currentPreset = presetName;
+                this.updateBackground();
+                this.updateParticleColors();
+                this.setupLighting();
+                this.createVisualization();
+                this.updateBackgroundObjects();
+                this.updateInfo();
+            }
+            
+            setMode(modeName) {
+                this.currentMode = modeName;
+                this.createVisualization();
+                this.updateCameraPosition();
+                this.updateInfo();
+            }
+            
+            updateBackground() {
+                const preset = this.presets[this.currentPreset];
+                this.scene.background = new THREE.Color(preset.background);
+            }
+            
+            updateParticleColors() {
+                if (!this.particleSystem) return;
+                
+                const colors = this.particleSystem.geometry.attributes.color.array;
+                const preset = this.presets[this.currentPreset];
+                const color = new THREE.Color(preset.particleColor);
+                
+                for (let i = 0; i < colors.length; i += 3) {
+                    colors[i] = color.r;
+                    colors[i + 1] = color.g;
+                    colors[i + 2] = color.b;
+                }
+                
+                this.particleSystem.geometry.attributes.color.needsUpdate = true;
+            }
+            
+            updateBackgroundObjects() {
+                const preset = this.presets[this.currentPreset];
+                this.backgroundObjects.forEach((obj, index) => {
+                    obj.material.color.setHex(preset.colors[index % 4]);
+                });
+            }
+            
+            updateCameraPosition() {
+                switch (this.currentMode) {
+                    case 'terrain':
+                        this.camera.position.set(0, 80, 120);
+                        break;
+                    case 'sphere':
+                        this.camera.position.set(0, 0, 150);
+                        break;
+                    case 'tunnel':
+                        this.camera.position.set(0, 0, -120);
+                        break;
+                    case 'galaxy':
+                        this.camera.position.set(0, 100, 200);
+                        break;
+                    case 'crystal':
+                        this.camera.position.set(100, 50, 100);
+                        break;
+                    case 'waves':
+                        this.camera.position.set(0, 100, 150);
+                        break;
+                }
+            }
+            
+            updateUniforms() {
+                if (this.currentMaterial && this.currentMaterial.uniforms) {
+                    this.currentMaterial.uniforms.intensity.value = this.intensity;
+                    this.currentMaterial.uniforms.speed.value = this.speed;
+                    this.currentMaterial.uniforms.complexity.value = this.complexity;
+                }
+            }
+            
+            randomizeSettings() {
+                // Random preset
+                const presetKeys = Object.keys(this.presets);
+                const randomPreset = presetKeys[Math.floor(Math.random() * presetKeys.length)];
+                
+                // Random mode
+                const modes = ['terrain', 'sphere', 'tunnel', 'galaxy', 'crystal', 'waves'];
+                const randomMode = modes[Math.floor(Math.random() * modes.length)];
+                
+                // Random parameters
+                this.intensity = Math.random() * 2.5 + 0.5;
+                this.speed = Math.random() * 4 + 0.5;
+                this.complexity = Math.floor(Math.random() * 5) + 1;
+                
+                // Update UI
+                document.querySelectorAll('.preset-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.preset === randomPreset);
+                });
+                
+                document.querySelectorAll('.mode-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.mode === randomMode);
+                });
+                
+                document.getElementById('intensity').value = this.intensity;
+                document.getElementById('speed').value = this.speed;
+                document.getElementById('complexity').value = this.complexity;
+                
+                // Apply changes
+                this.setPreset(randomPreset);
+                this.setMode(randomMode);
+            }
+            
+            updateInfo() {
+                document.getElementById('currentMode').textContent = this.currentMode.charAt(0).toUpperCase() + this.currentMode.slice(1);
+                document.getElementById('currentPreset').textContent = this.currentPreset.charAt(0).toUpperCase() + this.currentPreset.slice(1);
+                document.getElementById('patternIndicator').textContent = `${this.currentPreset.charAt(0).toUpperCase() + this.currentPreset.slice(1)} ${this.currentMode.charAt(0).toUpperCase() + this.currentMode.slice(1)}`;
+            }
+            
+            createFrequencyDisplay() {
+                const display = document.getElementById('freqDisplay');
+                for (let i = 0; i < 64; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'freq-bar';
+                    bar.style.height = '2px';
+                    display.appendChild(bar);
+                }
+            }
+            
+            async startAudio() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 256;
+                    
+                    this.audioSource = this.audioContext.createMediaStreamSource(stream);
+                    this.audioSource.connect(this.analyser);
+                    
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                    this.isPlaying = true;
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('pauseBtn').disabled = false;
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                    alert('Error accessing microphone. Please check permissions.');
+                }
+            }
+            
+            async loadAudioFile(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                try {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 256;
+                    
+                    const arrayBuffer = await file.arrayBuffer();
+                    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    
+                    if (this.audioSource) {
+                        this.audioSource.stop();
+                    }
+                    
+                    this.audioSource = this.audioContext.createBufferSource();
+                    this.audioSource.buffer = audioBuffer;
+                    this.audioSource.connect(this.analyser);
+                    this.audioSource.connect(this.audioContext.destination);
+                    this.audioSource.loop = true;
+                    this.audioSource.start();
+                    
+                    this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                    this.isPlaying = true;
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('pauseBtn').disabled = false;
+                } catch (error) {
+                    console.error('Error loading audio file:', error);
+                    alert('Error loading audio file.');
+                }
+            }
+            
+            pauseAudio() {
+                this.isPlaying = false;
+                if (this.audioContext) {
+                    this.audioContext.suspend();
+                }
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('pauseBtn').disabled = true;
+            }
+            
+            updateVisualization() {
+                if (!this.isPlaying || !this.analyser || !this.dataArray) return;
+                
+                this.analyser.getByteFrequencyData(this.dataArray);
+                
+                // Calculate metrics
+                let sum = 0;
+                let maxAmplitude = 0;
+                let dominantFreqIndex = 0;
+                
+                for (let i = 0; i < this.dataArray.length; i++) {
+                    sum += this.dataArray[i];
+                    if (this.dataArray[i] > maxAmplitude) {
+                        maxAmplitude = this.dataArray[i];
+                        dominantFreqIndex = i;
+                    }
+                }
+                
+                const avgAmplitude = sum / this.dataArray.length / 255;
+                const dominantFreq = (dominantFreqIndex * this.audioContext.sampleRate / 2) / this.analyser.fftSize;
+                
+                // Update material uniforms
+                if (this.currentMaterial && this.currentMaterial.uniforms) {
+                    const normalizedFreqs = Array.from(this.dataArray).map(val => val / 255);
+                    this.currentMaterial.uniforms.frequencies.value = normalizedFreqs;
+                    this.currentMaterial.uniforms.amplitude.value = avgAmplitude;
+                    this.currentMaterial.uniforms.time.value = this.animationTime;
+                }
+                
+                // Update particle system
+                if (this.particleSystem) {
+                    const positions = this.particleSystem.geometry.attributes.position.array;
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const freqIndex = Math.floor((i / 3) % this.dataArray.length);
+                        const amplitude = this.dataArray[freqIndex] / 255;
+                        
+                        // Particle movement based on frequency
+                        positions[i] += Math.sin(this.animationTime * 0.001 + i * 0.01) * amplitude * 2;
+                        positions[i + 1] += Math.cos(this.animationTime * 0.001 + i * 0.01) * amplitude * 2;
+                        positions[i + 2] += Math.sin(this.animationTime * 0.0005 + i * 0.005) * amplitude;
+                        
+                        // Boundary check
+                        if (Math.abs(positions[i]) > 300) positions[i] *= 0.8;
+                        if (Math.abs(positions[i + 1]) > 200) positions[i + 1] *= 0.8;
+                        if (Math.abs(positions[i + 2]) > 300) positions[i + 2] *= 0.8;
+                    }
+                    
+                    this.particleSystem.geometry.attributes.position.needsUpdate = true;
+                    this.particleSystem.material.uniforms.time.value = this.animationTime;
+                    this.particleSystem.material.uniforms.amplitude.value = avgAmplitude;
+                }
+                
+                // Update frequency display bars
+                const bars = document.querySelectorAll('.freq-bar');
+                for (let i = 0; i < Math.min(bars.length, this.dataArray.length); i++) {
+                    const height = (this.dataArray[i] / 255) * 40;
+                    bars[i].style.height = Math.max(2, height) + 'px';
+                }
+                
+                // Update info display
+                document.getElementById('amplitude').textContent = (avgAmplitude * 100).toFixed(1) + '%';
+                document.getElementById('dominantFreq').textContent = dominantFreq.toFixed(0) + ' Hz';
+                
+                // Dynamic camera movement
+                const cameraRadius = 150 + avgAmplitude * 50;
+                const cameraSpeed = 0.0005 * this.speed;
+                
+                switch (this.currentMode) {
+                    case 'terrain':
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed) * cameraRadius * 0.5;
+                        this.camera.position.z = Math.cos(this.animationTime * cameraSpeed) * cameraRadius * 0.8;
+                        this.camera.position.y = 80 + avgAmplitude * 40;
+                        this.camera.lookAt(0, 0, 0);
+                        break;
+                    case 'sphere':
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed) * cameraRadius;
+                        this.camera.position.z = Math.cos(this.animationTime * cameraSpeed) * cameraRadius;
+                        this.camera.position.y = Math.sin(this.animationTime * cameraSpeed * 0.5) * 50;
+                        this.camera.lookAt(0, 0, 0);
+                        break;
+                    case 'tunnel':
+                        this.camera.position.z = -120 + Math.sin(this.animationTime * cameraSpeed * 2) * 20;
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed) * 30;
+                        this.camera.position.y = Math.cos(this.animationTime * cameraSpeed) * 30;
+                        this.camera.lookAt(0, 0, 100);
+                        break;
+                    case 'galaxy':
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed) * 200;
+                        this.camera.position.z = Math.cos(this.animationTime * cameraSpeed) * 200;
+                        this.camera.position.y = 100 + Math.sin(this.animationTime * cameraSpeed * 2) * 50;
+                        this.camera.lookAt(0, 0, 0);
+                        break;
+                    case 'crystal':
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed) * cameraRadius;
+                        this.camera.position.z = Math.cos(this.animationTime * cameraSpeed) * cameraRadius;
+                        this.camera.position.y = 50 + Math.sin(this.animationTime * cameraSpeed * 3) * 30;
+                        this.camera.lookAt(0, 0, 0);
+                        break;
+                    case 'waves':
+                        this.camera.position.x = Math.sin(this.animationTime * cameraSpeed * 0.5) * 100;
+                        this.camera.position.z = 150 + Math.cos(this.animationTime * cameraSpeed * 0.7) * 50;
+                        this.camera.position.y = 100 + avgAmplitude * 50;
+                        this.camera.lookAt(0, 0, 0);
+                        break;
+                }
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                this.animationTime = Date.now();
+                this.updateVisualization();
+                
+                // Animate background objects
+                this.backgroundObjects.forEach((obj, index) => {
+                    obj.rotation.x += 0.01;
+                    obj.rotation.y += 0.005;
+                    obj.position.y += Math.sin(this.animationTime * 0.001 + index) * 0.1;
+                });
+                
+                // Rotate particle system and current mesh
+                if (this.particleSystem) {
+                    this.particleSystem.rotation.y += 0.001 * this.speed;
+                }
+                
+                if (this.currentMesh && this.currentMode === 'galaxy') {
+                    this.currentMesh.rotation.y += 0.002 * this.speed;
+                }
+                
+                if (this.currentMesh && this.currentMode === 'crystal') {
+                    this.currentMesh.rotation.x += 0.005 * this.speed;
+                    this.currentMesh.rotation.y += 0.003 * this.speed;
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+        }
+        
+        // Initialize the enhanced visualizer
+        const visualizer = new EnhancedAudioVisualizer3D();
+
+        // Add after class initialization
+        document.querySelectorAll('.section-title').forEach(title => {
+            title.addEventListener('click', () => {
+                title.classList.toggle('collapsed');
+                title.nextElementSibling.classList.toggle('collapsed');
+            });
+        });
+    </script>
+</body>
+</html>
